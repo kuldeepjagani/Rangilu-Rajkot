@@ -1,0 +1,1050 @@
+{
+  "apiBaseUrl": "http://localhost:8080/api",
+  "globalResponseWrapper": {
+    "success": "boolean",
+    "message": "string",
+    "data": "T | undefined",
+    "meta": "{ total: number, page: number, limit: number, totalPages: number } | undefined"
+  },
+  "enums": {
+    "Role": ["USER", "ADMIN"],
+    "Gender": ["MALE", "FEMALE", "OTHER"],
+    "UserStatus": ["ACTIVE", "INACTIVE"],
+    "PostCategory": ["EVENT", "FOOD", "SPORTS", "DAYRO", "OTHER"],
+    "PostStatus": ["ACTIVE", "REMOVED"]
+  },
+  "sharedSchemas": {
+    "AuthorSummary": {
+      "id": "string (uuid)",
+      "username": "string",
+      "displayName": "string",
+      "avatar": "string | null"
+    },
+    "PostSummary": {
+      "id": "string (uuid)",
+      "title": "string",
+      "content": "string",
+      "images": "string[]",
+      "category": "PostCategory",
+      "subcategory": "string | null",
+      "tags": "string[]",
+      "status": "PostStatus",
+      "eventDate": "string (ISO) | null",
+      "eventVenue": "string | null",
+      "isOngoing": "boolean",
+      "viewCount": "number",
+      "address": "string | null",
+      "locationCoordinate": "string | null",
+      "authorId": "string",
+      "author": "AuthorSummary",
+      "createdAt": "string (ISO)",
+      "updatedAt": "string (ISO)",
+      "_count": {
+        "likes": "number",
+        "comments": "number"
+      }
+    },
+    "PostSummaryAdmin": {
+      "_extends": "PostSummary",
+      "_count": {
+        "likes": "number",
+        "comments": "number",
+        "reports": "number"
+      }
+    },
+    "CommentItem": {
+      "id": "string (uuid)",
+      "content": "string",
+      "authorId": "string",
+      "author": "AuthorSummary",
+      "postId": "string",
+      "parentId": "string | null",
+      "createdAt": "string (ISO)",
+      "replies": "CommentItem[]"
+    },
+    "PaginationMeta": {
+      "total": "number",
+      "page": "number",
+      "limit": "number",
+      "totalPages": "number"
+    }
+  },
+  "endpoints": {
+    "health": {
+      "GET /api/health": {
+        "description": "Health check",
+        "auth": false,
+        "headers": {},
+        "pathParams": {},
+        "queryParams": {},
+        "requestBody": null,
+        "successResponse": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "message": "RajkotLive API is running",
+            "timestamp": "string (ISO)"
+          }
+        }
+      }
+    },
+    "genders": {
+      "GET /api/genders": {
+        "description": "Get list of gender options",
+        "auth": false,
+        "headers": {},
+        "pathParams": {},
+        "queryParams": {},
+        "requestBody": null,
+        "successResponse": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "message": "Gender list fetched",
+            "data": [
+              { "value": "MALE", "label": "Male" },
+              { "value": "FEMALE", "label": "Female" },
+              { "value": "OTHER", "label": "Other" }
+            ]
+          }
+        }
+      }
+    },
+    "auth": {
+      "POST /api/auth/register": {
+        "description": "Register a new user",
+        "auth": false,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "pathParams": {},
+        "queryParams": {},
+        "requestBody": {
+          "username": { "type": "string", "required": true, "min": 3, "max": 30, "pattern": "^[a-zA-Z0-9_]+$" },
+          "email": { "type": "string", "required": true, "format": "email" },
+          "password": { "type": "string", "required": true, "min": 6, "max": 100 },
+          "displayName": { "type": "string", "required": true, "min": 2, "max": 50 },
+          "gender": { "type": "string", "required": false, "enum": ["MALE", "FEMALE", "OTHER"] }
+        },
+        "successResponse": {
+          "status": 201,
+          "body": {
+            "success": true,
+            "message": "Registration successful",
+            "data": {
+              "user": {
+                "id": "string (uuid)",
+                "username": "string",
+                "email": "string",
+                "displayName": "string",
+                "gender": "string | null",
+                "role": "string",
+                "createdAt": "string (ISO)"
+              },
+              "accessToken": "string (JWT)",
+              "refreshToken": "string (JWT)"
+            }
+          }
+        }
+      },
+      "POST /api/auth/login": {
+        "description": "Login with email and password",
+        "auth": false,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "pathParams": {},
+        "queryParams": {},
+        "requestBody": {
+          "email": { "type": "string", "required": true, "format": "email" },
+          "password": { "type": "string", "required": true, "min": 1 }
+        },
+        "successResponse": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "message": "Login successful",
+            "data": {
+              "user": {
+                "id": "string (uuid)",
+                "username": "string",
+                "email": "string",
+                "displayName": "string",
+                "avatar": "string | null",
+                "bio": "string | null",
+                "role": "string",
+                "gender": "string | null",
+                "status": "string",
+                "createdAt": "string (ISO)",
+                "updatedAt": "string (ISO)"
+              },
+              "accessToken": "string (JWT)",
+              "refreshToken": "string (JWT)"
+            }
+          }
+        }
+      },
+      "POST /api/auth/refresh": {
+        "description": "Refresh access token using refresh token",
+        "auth": false,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "pathParams": {},
+        "queryParams": {},
+        "requestBody": {
+          "refreshToken": { "type": "string", "required": true }
+        },
+        "successResponse": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "message": "Token refreshed successfully",
+            "data": {
+              "accessToken": "string (JWT)",
+              "refreshToken": "string (JWT)"
+            }
+          }
+        }
+      },
+      "POST /api/auth/logout": {
+        "description": "Logout (client-side token cleanup)",
+        "auth": true,
+        "headers": {
+          "Authorization": "Bearer <accessToken>"
+        },
+        "pathParams": {},
+        "queryParams": {},
+        "requestBody": null,
+        "successResponse": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "message": "Logged out successfully",
+            "data": null
+          }
+        }
+      },
+      "GET /api/auth/me": {
+        "description": "Get current authenticated user profile",
+        "auth": true,
+        "headers": {
+          "Authorization": "Bearer <accessToken>"
+        },
+        "pathParams": {},
+        "queryParams": {},
+        "requestBody": null,
+        "successResponse": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "message": "Success",
+            "data": {
+              "id": "string (uuid)",
+              "username": "string",
+              "email": "string",
+              "displayName": "string",
+              "avatar": "string | null",
+              "bio": "string | null",
+              "gender": "string | null",
+              "role": "string",
+              "createdAt": "string (ISO)",
+              "updatedAt": "string (ISO)",
+              "_count": {
+                "posts": "number",
+                "likes": "number"
+              }
+            }
+          }
+        }
+      }
+    },
+    "upload": {
+      "POST /api/upload": {
+        "description": "Upload one or more images to S3. Returns S3 URLs to use in create post images array.",
+        "auth": true,
+        "headers": {
+          "Authorization": "Bearer <accessToken>",
+          "Content-Type": "multipart/form-data"
+        },
+        "pathParams": {},
+        "queryParams": {},
+        "requestBody": {
+          "images": { "type": "File[]", "required": true, "description": "Image files (JPEG, PNG, GIF, WebP). Max 4 files, 5MB each." },
+          "fileType": { "type": "string", "required": false, "default": "post_image", "description": "e.g. post_image or avatar. Determines S3 folder." }
+        },
+        "successResponse": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "message": "Images uploaded successfully",
+            "data": [
+              {
+                "url": "string (S3 public URL)",
+                "fileType": "string",
+                "originalName": "string",
+                "size": "number (bytes)",
+                "mimeType": "string"
+              }
+            ]
+          }
+        }
+      },
+      "POST /api/upload/avatar": {
+        "description": "Upload a single avatar image to S3",
+        "auth": true,
+        "headers": {
+          "Authorization": "Bearer <accessToken>",
+          "Content-Type": "multipart/form-data"
+        },
+        "pathParams": {},
+        "queryParams": {},
+        "requestBody": {
+          "avatar": { "type": "File", "required": true, "description": "Single image file (JPEG, PNG, GIF, WebP). Max 5MB." }
+        },
+        "successResponse": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "message": "Avatar uploaded successfully",
+            "data": {
+              "url": "string (S3 public URL)",
+              "fileType": "avatar",
+              "originalName": "string",
+              "size": "number (bytes)",
+              "mimeType": "string"
+            }
+          }
+        }
+      }
+    },
+    "posts": {
+      "GET /api/posts": {
+        "description": "Get all active posts with optional filters (public, optional auth)",
+        "auth": "optional",
+        "headers": {
+          "Authorization": "Bearer <accessToken> (optional)"
+        },
+        "pathParams": {},
+        "queryParams": {
+          "category": { "type": "string", "required": false, "enum": ["EVENT", "FOOD", "SPORTS", "DAYRO", "OTHER"] },
+          "subcategory": { "type": "string", "required": false },
+          "search": { "type": "string", "required": false, "description": "Search in title, content, tags" },
+          "sort": { "type": "string", "required": false, "enum": ["latest", "popular", "upcoming"], "default": "latest" },
+          "page": { "type": "string (number)", "required": false, "default": "1" },
+          "limit": { "type": "string (number)", "required": false, "default": "10" }
+        },
+        "requestBody": null,
+        "successResponse": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "message": "Posts fetched successfully",
+            "data": ["PostSummary[]"],
+            "meta": "PaginationMeta"
+          }
+        }
+      },
+      "GET /api/posts/:id": {
+        "description": "Get single post by ID with comments (increments view count)",
+        "auth": "optional",
+        "headers": {
+          "Authorization": "Bearer <accessToken> (optional)"
+        },
+        "pathParams": {
+          "id": { "type": "string (uuid)", "required": true }
+        },
+        "queryParams": {},
+        "requestBody": null,
+        "successResponse": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "message": "Success",
+            "data": {
+              "_extends": "PostSummary",
+              "comments": [
+                {
+                  "id": "string (uuid)",
+                  "content": "string",
+                  "authorId": "string",
+                  "author": "AuthorSummary",
+                  "postId": "string",
+                  "parentId": "null",
+                  "createdAt": "string (ISO)",
+                  "replies": [
+                    {
+                      "id": "string (uuid)",
+                      "content": "string",
+                      "author": "AuthorSummary",
+                      "parentId": "string",
+                      "createdAt": "string (ISO)",
+                      "replies": ["CommentItem[] (max 2 levels deep)"]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      },
+      "POST /api/posts": {
+        "description": "Create a new post. Upload images first via /api/upload, then pass URLs here.",
+        "auth": true,
+        "headers": {
+          "Authorization": "Bearer <accessToken>",
+          "Content-Type": "application/json"
+        },
+        "pathParams": {},
+        "queryParams": {},
+        "requestBody": {
+          "title": { "type": "string", "required": true, "min": 3, "max": 200 },
+          "content": { "type": "string", "required": true, "min": 10 },
+          "category": { "type": "string", "required": true, "enum": ["EVENT", "FOOD", "SPORTS", "DAYRO", "OTHER"] },
+          "subcategory": { "type": "string", "required": false, "max": 100 },
+          "tags": { "type": "string | string[]", "required": false, "description": "Comma-separated string or array of strings" },
+          "eventDate": { "type": "string", "required": false, "format": "ISO 8601 datetime with offset" },
+          "eventVenue": { "type": "string", "required": false, "max": 200 },
+          "isOngoing": { "type": "boolean | string", "required": false, "default": false },
+          "address": { "type": "string", "required": false, "max": 300 },
+          "locationCoordinate": { "type": "string", "required": false, "max": 100 },
+          "images": { "type": "string[]", "required": false, "description": "Array of S3 image URLs from /api/upload" }
+        },
+        "successResponse": {
+          "status": 201,
+          "body": {
+            "success": true,
+            "message": "Post created successfully",
+            "data": "PostSummary"
+          }
+        }
+      },
+      "PUT /api/posts/:id": {
+        "description": "Update own post (partial update)",
+        "auth": true,
+        "headers": {
+          "Authorization": "Bearer <accessToken>",
+          "Content-Type": "application/json"
+        },
+        "pathParams": {
+          "id": { "type": "string (uuid)", "required": true }
+        },
+        "queryParams": {},
+        "requestBody": {
+          "_note": "All fields are optional (partial update)",
+          "title": { "type": "string", "required": false, "min": 3, "max": 200 },
+          "content": { "type": "string", "required": false, "min": 10 },
+          "category": { "type": "string", "required": false, "enum": ["EVENT", "FOOD", "SPORTS", "DAYRO", "OTHER"] },
+          "subcategory": { "type": "string", "required": false, "max": 100 },
+          "tags": { "type": "string | string[]", "required": false },
+          "eventDate": { "type": "string", "required": false, "format": "ISO 8601" },
+          "eventVenue": { "type": "string", "required": false, "max": 200 },
+          "isOngoing": { "type": "boolean | string", "required": false },
+          "address": { "type": "string", "required": false, "max": 300 },
+          "locationCoordinate": { "type": "string", "required": false, "max": 100 },
+          "images": { "type": "string[]", "required": false, "description": "Array of S3 image URLs" }
+        },
+        "successResponse": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "message": "Post updated successfully",
+            "data": "PostSummary"
+          }
+        }
+      },
+      "DELETE /api/posts/:id": {
+        "description": "Delete own post (admin can delete any)",
+        "auth": true,
+        "headers": {
+          "Authorization": "Bearer <accessToken>"
+        },
+        "pathParams": {
+          "id": { "type": "string (uuid)", "required": true }
+        },
+        "queryParams": {},
+        "requestBody": null,
+        "successResponse": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "message": "Post deleted successfully",
+            "data": null
+          }
+        }
+      },
+      "POST /api/posts/:id/like": {
+        "description": "Toggle like on a post",
+        "auth": true,
+        "headers": {
+          "Authorization": "Bearer <accessToken>"
+        },
+        "pathParams": {
+          "id": { "type": "string (uuid)", "required": true }
+        },
+        "queryParams": {},
+        "requestBody": null,
+        "successResponse": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "message": "Post liked | Post unliked",
+            "data": {
+              "liked": "boolean"
+            }
+          }
+        }
+      },
+      "POST /api/posts/:id/save": {
+        "description": "Toggle save/bookmark on a post",
+        "auth": true,
+        "headers": {
+          "Authorization": "Bearer <accessToken>"
+        },
+        "pathParams": {
+          "id": { "type": "string (uuid)", "required": true }
+        },
+        "queryParams": {},
+        "requestBody": null,
+        "successResponse": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "message": "Post saved | Post unsaved",
+            "data": {
+              "saved": "boolean"
+            }
+          }
+        }
+      },
+      "POST /api/posts/:id/report": {
+        "description": "Report a post (one report per user per post)",
+        "auth": true,
+        "headers": {
+          "Authorization": "Bearer <accessToken>",
+          "Content-Type": "application/json"
+        },
+        "pathParams": {
+          "id": { "type": "string (uuid)", "required": true }
+        },
+        "queryParams": {},
+        "requestBody": {
+          "reason": { "type": "string", "required": false, "description": "Optional reason for reporting" }
+        },
+        "successResponse": {
+          "status": 201,
+          "body": {
+            "success": true,
+            "message": "Post reported successfully",
+            "data": {
+              "id": "string (uuid)",
+              "reason": "string | null",
+              "userId": "string (uuid)",
+              "postId": "string (uuid)",
+              "createdAt": "string (ISO)"
+            }
+          }
+        }
+      }
+    },
+    "comments": {
+      "POST /api/posts/:id/comments": {
+        "description": "Add a top-level comment on a post",
+        "auth": true,
+        "headers": {
+          "Authorization": "Bearer <accessToken>",
+          "Content-Type": "application/json"
+        },
+        "pathParams": {
+          "id": { "type": "string (uuid)", "required": true, "description": "Post ID" }
+        },
+        "queryParams": {},
+        "requestBody": {
+          "content": { "type": "string", "required": true, "min": 1, "max": 2000 }
+        },
+        "successResponse": {
+          "status": 201,
+          "body": {
+            "success": true,
+            "message": "Comment added successfully",
+            "data": {
+              "id": "string (uuid)",
+              "content": "string",
+              "authorId": "string",
+              "author": "AuthorSummary",
+              "postId": "string",
+              "parentId": "null",
+              "createdAt": "string (ISO)"
+            }
+          }
+        }
+      },
+      "POST /api/comments/:id/reply": {
+        "description": "Reply to a comment (max 2 levels deep)",
+        "auth": true,
+        "headers": {
+          "Authorization": "Bearer <accessToken>",
+          "Content-Type": "application/json"
+        },
+        "pathParams": {
+          "id": { "type": "string (uuid)", "required": true, "description": "Parent comment ID" }
+        },
+        "queryParams": {},
+        "requestBody": {
+          "content": { "type": "string", "required": true, "min": 1, "max": 2000 }
+        },
+        "successResponse": {
+          "status": 201,
+          "body": {
+            "success": true,
+            "message": "Reply added successfully",
+            "data": {
+              "id": "string (uuid)",
+              "content": "string",
+              "authorId": "string",
+              "author": "AuthorSummary",
+              "postId": "string",
+              "parentId": "string (uuid)",
+              "createdAt": "string (ISO)"
+            }
+          }
+        }
+      },
+      "DELETE /api/comments/:id": {
+        "description": "Delete own comment (admin can delete any)",
+        "auth": true,
+        "headers": {
+          "Authorization": "Bearer <accessToken>"
+        },
+        "pathParams": {
+          "id": { "type": "string (uuid)", "required": true, "description": "Comment ID" }
+        },
+        "queryParams": {},
+        "requestBody": null,
+        "successResponse": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "message": "Comment deleted successfully",
+            "data": null
+          }
+        }
+      }
+    },
+    "users": {
+      "GET /api/users/:username": {
+        "description": "Get public profile of a user by username",
+        "auth": false,
+        "headers": {},
+        "pathParams": {
+          "username": { "type": "string", "required": true }
+        },
+        "queryParams": {},
+        "requestBody": null,
+        "successResponse": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "message": "Success",
+            "data": {
+              "id": "string (uuid)",
+              "username": "string",
+              "displayName": "string",
+              "avatar": "string | null",
+              "bio": "string | null",
+              "gender": "string | null",
+              "role": "string",
+              "createdAt": "string (ISO)",
+              "_count": {
+                "posts": "number"
+              },
+              "posts": [
+                {
+                  "id": "string (uuid)",
+                  "title": "string",
+                  "category": "PostCategory",
+                  "createdAt": "string (ISO)",
+                  "_count": { "likes": "number", "comments": "number" }
+                }
+              ],
+              "likesReceived": "number"
+            }
+          }
+        }
+      },
+      "PUT /api/users/me": {
+        "description": "Update own profile (supports avatar file upload via multipart)",
+        "auth": true,
+        "headers": {
+          "Authorization": "Bearer <accessToken>",
+          "Content-Type": "multipart/form-data"
+        },
+        "pathParams": {},
+        "queryParams": {},
+        "requestBody": {
+          "displayName": { "type": "string", "required": false, "min": 2, "max": 50 },
+          "bio": { "type": "string", "required": false, "max": 500 },
+          "gender": { "type": "string", "required": false, "enum": ["MALE", "FEMALE", "OTHER"] },
+          "avatar": { "type": "File", "required": false, "description": "Avatar image file (JPEG, PNG, GIF, WebP)" }
+        },
+        "successResponse": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "message": "Profile updated successfully",
+            "data": {
+              "id": "string (uuid)",
+              "username": "string",
+              "email": "string",
+              "displayName": "string",
+              "avatar": "string | null",
+              "bio": "string | null",
+              "gender": "string | null",
+              "role": "string",
+              "createdAt": "string (ISO)",
+              "updatedAt": "string (ISO)"
+            }
+          }
+        }
+      },
+      "GET /api/users/me/saved": {
+        "description": "Get current user's saved/bookmarked posts",
+        "auth": true,
+        "headers": {
+          "Authorization": "Bearer <accessToken>"
+        },
+        "pathParams": {},
+        "queryParams": {
+          "page": { "type": "string (number)", "required": false, "default": "1" },
+          "limit": { "type": "string (number)", "required": false, "default": "10" }
+        },
+        "requestBody": null,
+        "successResponse": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "message": "Saved posts fetched",
+            "data": ["PostSummary[]"],
+            "meta": "PaginationMeta"
+          }
+        }
+      },
+      "GET /api/users/me/posts": {
+        "description": "Get current user's own posts",
+        "auth": true,
+        "headers": {
+          "Authorization": "Bearer <accessToken>"
+        },
+        "pathParams": {},
+        "queryParams": {
+          "page": { "type": "string (number)", "required": false, "default": "1" },
+          "limit": { "type": "string (number)", "required": false, "default": "10" }
+        },
+        "requestBody": null,
+        "successResponse": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "message": "Your posts fetched",
+            "data": ["PostSummary[]"],
+            "meta": "PaginationMeta"
+          }
+        }
+      }
+    },
+    "admin": {
+      "_note": "All admin endpoints require Authorization header with ADMIN role token",
+      "_headers": {
+        "Authorization": "Bearer <adminAccessToken>"
+      },
+      "GET /api/admin/stats": {
+        "description": "Get dashboard statistics",
+        "auth": true,
+        "role": "ADMIN",
+        "headers": {
+          "Authorization": "Bearer <adminAccessToken>"
+        },
+        "pathParams": {},
+        "queryParams": {},
+        "requestBody": null,
+        "successResponse": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "message": "Dashboard stats fetched",
+            "data": {
+              "totalPosts": "number",
+              "todayPosts": "number",
+              "removedPosts": "number",
+              "totalUsers": "number",
+              "bannedUsers": "number",
+              "totalReports": "number",
+              "reportedPostsCount": "number"
+            }
+          }
+        }
+      },
+      "GET /api/admin/posts": {
+        "description": "Get all posts with filters (search, category, status, reported)",
+        "auth": true,
+        "role": "ADMIN",
+        "headers": {
+          "Authorization": "Bearer <adminAccessToken>"
+        },
+        "pathParams": {},
+        "queryParams": {
+          "search": { "type": "string", "required": false, "description": "Search by title, author displayName, or username" },
+          "category": { "type": "string", "required": false, "enum": ["EVENT", "FOOD", "SPORTS", "DAYRO", "OTHER"] },
+          "status": { "type": "string", "required": false, "enum": ["ACTIVE", "REMOVED"] },
+          "reported": { "type": "string", "required": false, "enum": ["true"], "description": "Set to 'true' to show only reported posts" },
+          "page": { "type": "string (number)", "required": false, "default": "1" },
+          "limit": { "type": "string (number)", "required": false, "default": "10" }
+        },
+        "requestBody": null,
+        "successResponse": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "message": "All posts fetched",
+            "data": ["PostSummaryAdmin[] (includes _count.reports)"],
+            "meta": "PaginationMeta"
+          }
+        }
+      },
+      "PUT /api/admin/posts/:id/status": {
+        "description": "Update post status (ACTIVE or REMOVED)",
+        "auth": true,
+        "role": "ADMIN",
+        "headers": {
+          "Authorization": "Bearer <adminAccessToken>",
+          "Content-Type": "application/json"
+        },
+        "pathParams": {
+          "id": { "type": "string (uuid)", "required": true, "description": "Post ID" }
+        },
+        "queryParams": {},
+        "requestBody": {
+          "status": { "type": "string", "required": true, "enum": ["ACTIVE", "REMOVED"] }
+        },
+        "successResponse": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "message": "Post status updated successfully",
+            "data": "PostSummaryAdmin"
+          }
+        }
+      },
+      "DELETE /api/admin/posts/:id": {
+        "description": "Permanently delete a post and all related data",
+        "auth": true,
+        "role": "ADMIN",
+        "headers": {
+          "Authorization": "Bearer <adminAccessToken>"
+        },
+        "pathParams": {
+          "id": { "type": "string (uuid)", "required": true, "description": "Post ID" }
+        },
+        "queryParams": {},
+        "requestBody": null,
+        "successResponse": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "message": "Post deleted successfully",
+            "data": null
+          }
+        }
+      },
+      "GET /api/admin/reports": {
+        "description": "Get all reported posts with full report details and reporter info",
+        "auth": true,
+        "role": "ADMIN",
+        "headers": {
+          "Authorization": "Bearer <adminAccessToken>"
+        },
+        "pathParams": {},
+        "queryParams": {
+          "page": { "type": "string (number)", "required": false, "default": "1" },
+          "limit": { "type": "string (number)", "required": false, "default": "10" }
+        },
+        "requestBody": null,
+        "successResponse": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "message": "Reported posts fetched",
+            "data": [
+              {
+                "_extends": "PostSummaryAdmin",
+                "reports": [
+                  {
+                    "id": "string (uuid)",
+                    "reason": "string | null",
+                    "userId": "string",
+                    "postId": "string",
+                    "createdAt": "string (ISO)",
+                    "user": {
+                      "id": "string (uuid)",
+                      "username": "string",
+                      "displayName": "string"
+                    }
+                  }
+                ]
+              }
+            ],
+            "meta": "PaginationMeta"
+          }
+        }
+      },
+      "DELETE /api/admin/reports/:id/dismiss": {
+        "description": "Dismiss all reports on a specific post",
+        "auth": true,
+        "role": "ADMIN",
+        "headers": {
+          "Authorization": "Bearer <adminAccessToken>"
+        },
+        "pathParams": {
+          "id": { "type": "string (uuid)", "required": true, "description": "Post ID (not report ID)" }
+        },
+        "queryParams": {},
+        "requestBody": null,
+        "successResponse": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "message": "Reports dismissed successfully",
+            "data": {
+              "postId": "string (uuid)",
+              "message": "All reports dismissed"
+            }
+          }
+        }
+      },
+      "GET /api/admin/users": {
+        "description": "Get all users with filters and report count",
+        "auth": true,
+        "role": "ADMIN",
+        "headers": {
+          "Authorization": "Bearer <adminAccessToken>"
+        },
+        "pathParams": {},
+        "queryParams": {
+          "search": { "type": "string", "required": false, "description": "Search by username, displayName, or email" },
+          "status": { "type": "string", "required": false, "enum": ["ACTIVE", "INACTIVE"] },
+          "role": { "type": "string", "required": false, "enum": ["USER", "ADMIN"] },
+          "page": { "type": "string (number)", "required": false, "default": "1" },
+          "limit": { "type": "string (number)", "required": false, "default": "10" }
+        },
+        "requestBody": null,
+        "successResponse": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "message": "All users fetched",
+            "data": [
+              {
+                "id": "string (uuid)",
+                "username": "string",
+                "email": "string",
+                "displayName": "string",
+                "avatar": "string | null",
+                "gender": "string | null",
+                "role": "string (USER | ADMIN)",
+                "status": "string (ACTIVE | INACTIVE)",
+                "createdAt": "string (ISO)",
+                "_count": {
+                  "posts": "number",
+                  "comments": "number",
+                  "likes": "number",
+                  "reports": "number"
+                }
+              }
+            ],
+            "meta": "PaginationMeta"
+          }
+        }
+      },
+      "PUT /api/admin/users/:id/role": {
+        "description": "Update a user's role",
+        "auth": true,
+        "role": "ADMIN",
+        "headers": {
+          "Authorization": "Bearer <adminAccessToken>",
+          "Content-Type": "application/json"
+        },
+        "pathParams": {
+          "id": { "type": "string (uuid)", "required": true, "description": "User ID" }
+        },
+        "queryParams": {},
+        "requestBody": {
+          "role": { "type": "string", "required": true, "enum": ["USER", "ADMIN"] }
+        },
+        "successResponse": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "message": "User role updated successfully",
+            "data": {
+              "id": "string (uuid)",
+              "username": "string",
+              "email": "string",
+              "displayName": "string",
+              "role": "string",
+              "status": "string"
+            }
+          }
+        }
+      },
+      "PUT /api/admin/users/:id/ban": {
+        "description": "Toggle ban/unban user (ACTIVE ↔ INACTIVE). Cannot ban admins.",
+        "auth": true,
+        "role": "ADMIN",
+        "headers": {
+          "Authorization": "Bearer <adminAccessToken>"
+        },
+        "pathParams": {
+          "id": { "type": "string (uuid)", "required": true, "description": "User ID" }
+        },
+        "queryParams": {},
+        "requestBody": null,
+        "successResponse": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "message": "User banned successfully | User unbanned successfully",
+            "data": {
+              "id": "string (uuid)",
+              "username": "string",
+              "email": "string",
+              "displayName": "string",
+              "role": "string",
+              "status": "string (ACTIVE | INACTIVE)"
+            }
+          }
+        }
+      },
+      "DELETE /api/admin/users/:id": {
+        "description": "Permanently delete a user and cascade delete ALL associated data (posts, comments, likes, saved posts, reports). Cannot delete admins.",
+        "auth": true,
+        "role": "ADMIN",
+        "headers": {
+          "Authorization": "Bearer <adminAccessToken>"
+        },
+        "pathParams": {
+          "id": { "type": "string (uuid)", "required": true, "description": "User ID" }
+        },
+        "queryParams": {},
+        "requestBody": null,
+        "successResponse": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "message": "User and all associated data deleted successfully",
+            "data": null
+          }
+        }
+      }
+    }
+  }
+}
