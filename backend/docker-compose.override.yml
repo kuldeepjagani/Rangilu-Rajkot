@@ -1,0 +1,29 @@
+# =============================================================================
+# Docker Compose Override for Local Development
+# =============================================================================
+# This file automatically overrides docker-compose.yml when running locally.
+# It enables hot-reload, development target, and debugging features.
+#
+# Usage: docker-compose up --build (automatically uses this override)
+# =============================================================================
+
+services:
+  backend:
+    build:
+      target: development
+    environment:
+      NODE_ENV: development
+    # Override command for development with hot-reload
+    command: ["npm", "run", "dev"]
+    # Development-specific volume mounts
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - uploads_data:/app/uploads
+    # Enable debugging (Node.js inspector)
+    ports:
+      - "${PORT:-5000}:5000"
+      - "9229:9229" # Node.js debugging port
+    # stdin and tty for interactive debugging
+    stdin_open: true
+    tty: true

@@ -1,0 +1,128 @@
+# =============================================================================
+# Production-Grade Docker Compose for Rangilu-Rajkot
+# =============================================================================
+# This file defines the complete stack for local development and production.
+# Services: Backend API (Node.js), PostgreSQL Database
+# =============================================================================
+
+services:
+  # ===========================================================================
+  # PostgreSQL Database
+  # ===========================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: rangilu-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-rangilu_rajkot}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./prisma/migrations:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    networks:
+      - rangilu-network
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${DB_USERNAME:-postgres} -d ${DB_NAME:-rangilu_rajkot}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ===========================================================================
+  # Backend API (Node.js + TypeScript)
+  # ===========================================================================
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: ${DOCKER_TARGET:-production}
+      args:
+        - NODE_ENV=${NODE_ENV:-production}
+    container_name: rangilu-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Server
+      PORT: ${PORT:-5000}
+      NODE_ENV: ${NODE_ENV:-production}
+
+      # Database (use service name as host for Docker networking)
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-rangilu_rajkot}
+      DATABASE_URL: postgresql://${DB_USERNAME:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-rangilu_rajkot}?schema=public
+
+      # JWT
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_ACCESS_EXPIRY: ${JWT_ACCESS_EXPIRY:-15m}
+      JWT_REFRESH_EXPIRY: ${JWT_REFRESH_EXPIRY:-7d}
+
+      # Upload
+      UPLOAD_DIR: ${UPLOAD_DIR:-uploads}
+      MAX_FILE_SIZE: ${MAX_FILE_SIZE:-5242880}
+      MAX_FILES: ${MAX_FILES:-4}
+
+      # AWS S3
+      AWS_BUCKET_NAME: ${AWS_BUCKET_NAME}
+      AWS_REGION: ${AWS_REGION:-ap-south-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+
+      # CORS
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+    ports:
+      - "${PORT:-5000}:5000"
+    volumes:
+      # Uploads persistence
+      - uploads_data:/app/uploads
+      # For development: mount source code for hot-reload
+      - type: bind
+        source: .
+        target: /app
+        read_only: false
+    networks:
+      - rangilu-network
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://localhost:5000/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1) })",
+        ]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 40s
+
+# =============================================================================
+# Named Volumes for Data Persistence
+# =============================================================================
+volumes:
+  postgres_data:
+    name: rangilu-postgres-data
+    driver: local
+  uploads_data:
+    name: rangilu-uploads-data
+    driver: local
+
+# =============================================================================
+# Docker Networks
+# =============================================================================
+networks:
+  rangilu-network:
+    name: rangilu-network
+    driver: bridge
