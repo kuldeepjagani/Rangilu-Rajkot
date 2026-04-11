@@ -1,12 +1,11 @@
 import { Router } from "express";
-import { Role } from "@prisma/client";
 import * as adminController from "../controllers/admin.controller";
 import { authenticate } from "../middlewares/authenticate";
 import { requireRole } from "../middlewares/requireRole";
 
 const router = Router();
 
-router.use(authenticate, requireRole(Role.ADMIN));
+router.use(authenticate, requireRole("ADMIN"));
 
 // Dashboard
 router.get("/stats", adminController.getStats);

@@ -1,5 +1,7 @@
 import bcrypt from "bcryptjs";
-import prisma from "../lib/prisma";
+import { User } from "../models";
+import { Post } from "../models";
+import { Like } from "../models";
 import { ApiError } from "../utils/apiError";
 import { generateTokenPair, verifyRefreshToken } from "../utils/jwt";
 
@@ -7,8 +9,8 @@ const SALT_ROUNDS = 12;
 
 export class AuthService {
   async register(data: { username: string; email: string; password: string; displayName: string; gender?: string }) {
-    const existingUser = await prisma.user.findFirst({
-      where: { OR: [{ email: data.email }, { username: data.username }] },
+    const existingUser = await User.findOne({
+      $or: [{ email: data.email }, { username: data.username }],
     });
 
     if (existingUser) {
@@ -18,32 +20,31 @@ export class AuthService {
 
     const hashedPassword = await bcrypt.hash(data.password, SALT_ROUNDS);
 
-    const user = await prisma.user.create({
-      data: {
-        username: data.username,
-        email: data.email,
-        password: hashedPassword,
-        displayName: data.displayName,
-        ...(data.gender && { gender: data.gender as any }),
-      },
-      select: {
-        id: true,
-        username: true,
-        email: true,
-        displayName: true,
-        gender: true,
-        role: true,
-        createdAt: true,
-      },
+    const user = await User.create({
+      username: data.username,
+      email: data.email,
+      password: hashedPassword,
+      displayName: data.displayName,
+      ...(data.gender && { gender: data.gender }),
     });
 
-    const tokens = generateTokenPair({ userId: user.id, role: user.role });
+    const userObj = {
+      id: user._id.toString(),
+      username: user.username,
+      email: user.email,
+      displayName: user.displayName,
+      gender: user.gender || null,
+      role: user.role,
+      createdAt: user.createdAt,
+    };
 
-    return { user, ...tokens };
+    const tokens = generateTokenPair({ userId: user._id.toString(), role: user.role });
+
+    return { user: userObj, ...tokens };
   }
 
   async login(email: string, password: string) {
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await User.findOne({ email });
 
     if (!user) {
       throw ApiError.unauthorized("Invalid email or password");
@@ -55,53 +56,46 @@ export class AuthService {
       throw ApiError.unauthorized("Invalid email or password");
     }
 
-    const tokens = generateTokenPair({ userId: user.id, role: user.role });
+    const tokens = generateTokenPair({ userId: user._id.toString(), role: user.role });
 
-    const { password: _, ...userWithoutPassword } = user;
+    const userObj = user.toJSON();
+    delete (userObj as any).password;
 
-    return { user: userWithoutPassword, ...tokens };
+    return { user: userObj, ...tokens };
   }
 
   async refreshToken(refreshToken: string) {
     const decoded = verifyRefreshToken(refreshToken);
 
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.userId },
-      select: { id: true, role: true },
-    });
+    const user = await User.findById(decoded.userId).select("_id role");
 
     if (!user) {
       throw ApiError.unauthorized("User no longer exists");
     }
 
-    const tokens = generateTokenPair({ userId: user.id, role: user.role });
+    const tokens = generateTokenPair({ userId: user._id.toString(), role: user.role });
 
     return tokens;
   }
 
   async getMe(userId: string) {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        username: true,
-        email: true,
-        displayName: true,
-        avatar: true,
-        bio: true,
-        gender: true,
-        role: true,
-        createdAt: true,
-        updatedAt: true,
-        _count: { select: { posts: true, likes: true } },
-      },
-    });
+    const user = await User.findById(userId).select("-password");
 
     if (!user) {
       throw ApiError.notFound("User not found");
     }
 
-    return user;
+    const [postsCount, likesCount] = await Promise.all([
+      Post.countDocuments({ authorId: userId }),
+      Like.countDocuments({ userId }),
+    ]);
+
+    const userObj = user.toJSON();
+
+    return {
+      ...userObj,
+      _count: { posts: postsCount, likes: likesCount },
+    };
   }
 }
 

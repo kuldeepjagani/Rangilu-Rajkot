@@ -1,11 +1,10 @@
 import app from "./app";
 import { config } from "./config";
-import prisma from "./lib/prisma";
+import { connectDB, disconnectDB } from "./lib/database";
 
 async function startServer() {
   try {
-    await prisma.$connect();
-    console.log("✅ Database connected successfully");
+    await connectDB();
 
     app.listen(config.port, () => {
       console.log(`🚀 RajkotLive API running on http://localhost:${config.port}`);
@@ -20,12 +19,12 @@ async function startServer() {
 // Graceful shutdown
 process.on("SIGINT", async () => {
   console.log("\n🛑 Shutting down gracefully...");
-  await prisma.$disconnect();
+  await disconnectDB();
   process.exit(0);
 });
 
 process.on("SIGTERM", async () => {
-  await prisma.$disconnect();
+  await disconnectDB();
   process.exit(0);
 });
 

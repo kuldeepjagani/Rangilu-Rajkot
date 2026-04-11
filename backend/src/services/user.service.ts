@@ -1,96 +1,105 @@
-import prisma from "../lib/prisma";
+import { User } from "../models";
+import { Post } from "../models";
+import { Like } from "../models";
+import { Comment } from "../models";
+import { SavedPost } from "../models";
 import { ApiError } from "../utils/apiError";
+
+const authorSelect = "username displayName avatar";
+
+async function enrichPostWithCounts(post: any) {
+  const postId = post._id || post.id;
+  const [likesCount, commentsCount] = await Promise.all([
+    Like.countDocuments({ postId }),
+    Comment.countDocuments({ postId }),
+  ]);
+  const obj = post.toJSON ? post.toJSON() : { ...post };
+  obj._count = { likes: likesCount, comments: commentsCount };
+  return obj;
+}
 
 export class UserService {
   async getPublicProfile(username: string) {
-    const user = await prisma.user.findUnique({
-      where: { username },
-      select: {
-        id: true,
-        username: true,
-        displayName: true,
-        avatar: true,
-        bio: true,
-        gender: true,
-        role: true,
-        createdAt: true,
-        _count: { select: { posts: true } },
-        posts: {
-          where: { status: "ACTIVE" },
-          orderBy: { createdAt: "desc" },
-          take: 10,
-          select: {
-            id: true,
-            title: true,
-            category: true,
-            createdAt: true,
-            _count: { select: { likes: true, comments: true } },
-          },
-        },
-      },
-    });
+    const user = await User.findOne({ username }).select("-password");
 
     if (!user) throw ApiError.notFound("User not found");
 
-    // Calculate total likes received on all user posts
-    const likesReceived = await prisma.like.count({
-      where: { post: { authorId: user.id } },
-    });
+    const userId = user._id.toString();
 
-    return { ...user, likesReceived };
+    // Get post count and recent posts
+    const [postsCount, recentPosts, likesReceived] = await Promise.all([
+      Post.countDocuments({ authorId: userId }),
+      Post.find({ authorId: userId, status: "ACTIVE" })
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .select("title category createdAt"),
+      Like.countDocuments({ postId: { $in: await Post.find({ authorId: userId }).select("_id").then(p => p.map(x => x._id)) } }),
+    ]);
+
+    // Enrich recent posts with counts
+    const postsWithCounts = await Promise.all(
+      recentPosts.map(async (p) => {
+        const [likes, comments] = await Promise.all([
+          Like.countDocuments({ postId: p._id }),
+          Comment.countDocuments({ postId: p._id }),
+        ]);
+        const obj = p.toJSON();
+        return { ...obj, _count: { likes, comments } };
+      })
+    );
+
+    const userObj = user.toJSON();
+
+    return {
+      ...userObj,
+      _count: { posts: postsCount },
+      posts: postsWithCounts,
+      likesReceived,
+    };
   }
 
   async updateProfile(userId: string, data: { displayName?: string; bio?: string; avatar?: string; gender?: string }) {
-    const user = await prisma.user.update({
-      where: { id: userId },
-      data: {
-        ...(data.displayName && { displayName: data.displayName }),
-        ...(data.bio !== undefined && { bio: data.bio }),
-        ...(data.avatar && { avatar: data.avatar }),
-        ...(data.gender && { gender: data.gender as any }),
-      },
-      select: {
-        id: true,
-        username: true,
-        email: true,
-        displayName: true,
-        avatar: true,
-        bio: true,
-        gender: true,
-        role: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
+    const updateData: any = {};
+    if (data.displayName) updateData.displayName = data.displayName;
+    if (data.bio !== undefined) updateData.bio = data.bio;
+    if (data.avatar) updateData.avatar = data.avatar;
+    if (data.gender) updateData.gender = data.gender;
 
-    return user;
+    const user = await User.findByIdAndUpdate(userId, updateData, { new: true }).select("-password");
+
+    if (!user) throw ApiError.notFound("User not found");
+
+    return user.toJSON();
   }
 
   async getSavedPosts(userId: string, page: number, limit: number) {
     const skip = (page - 1) * limit;
 
     const [savedPosts, total] = await Promise.all([
-      prisma.savedPost.findMany({
-        where: { userId },
-        skip,
-        take: limit,
-        orderBy: { createdAt: "desc" },
-        include: {
-          post: {
-            include: {
-              author: {
-                select: { id: true, username: true, displayName: true, avatar: true },
-              },
-              _count: { select: { likes: true, comments: true } },
-            },
-          },
-        },
-      }),
-      prisma.savedPost.count({ where: { userId } }),
+      SavedPost.find({ userId })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate({
+          path: "postId",
+          populate: { path: "authorId", select: authorSelect },
+        }),
+      SavedPost.countDocuments({ userId }),
     ]);
 
+    const posts = await Promise.all(
+      savedPosts.map(async (sp) => {
+        const post = sp.postId as any;
+        if (!post) return null;
+        const enriched = await enrichPostWithCounts(post);
+        enriched.author = enriched.authorId;
+        delete enriched.authorId;
+        return enriched;
+      })
+    );
+
     return {
-      posts: savedPosts.map((sp) => sp.post),
+      posts: posts.filter(Boolean),
       meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
     };
   }
@@ -99,23 +108,25 @@ export class UserService {
     const skip = (page - 1) * limit;
 
     const [posts, total] = await Promise.all([
-      prisma.post.findMany({
-        where: { authorId: userId },
-        skip,
-        take: limit,
-        orderBy: { createdAt: "desc" },
-        include: {
-          author: {
-            select: { id: true, username: true, displayName: true, avatar: true },
-          },
-          _count: { select: { likes: true, comments: true } },
-        },
-      }),
-      prisma.post.count({ where: { authorId: userId } }),
+      Post.find({ authorId: userId })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate("authorId", authorSelect),
+      Post.countDocuments({ authorId: userId }),
     ]);
 
+    const enriched = await Promise.all(
+      posts.map(async (p) => {
+        const obj = await enrichPostWithCounts(p);
+        obj.author = obj.authorId;
+        delete obj.authorId;
+        return obj;
+      })
+    );
+
     return {
-      posts,
+      posts: enriched,
       meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
     };
   }

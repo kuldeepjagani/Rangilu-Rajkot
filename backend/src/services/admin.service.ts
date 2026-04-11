@@ -1,6 +1,12 @@
-import { PostStatus, Prisma, Role, UserStatus } from "@prisma/client";
-import prisma from "../lib/prisma";
+import { User } from "../models";
+import { Post } from "../models";
+import { Comment } from "../models";
+import { Like } from "../models";
+import { SavedPost } from "../models";
+import { Report } from "../models";
 import { ApiError } from "../utils/apiError";
+
+const authorSelect = "username displayName avatar";
 
 interface PostFilters {
   search?: string;
@@ -26,65 +32,93 @@ export class AdminService {
     const { search, category, status, reported, page, limit } = filters;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.PostWhereInput = {};
+    const filter: any = {};
 
     if (search) {
-      where.OR = [
-        { title: { contains: search, mode: "insensitive" } },
-        { author: { displayName: { contains: search, mode: "insensitive" } } },
-        { author: { username: { contains: search, mode: "insensitive" } } },
+      const regex = new RegExp(search, "i");
+      // First find matching user IDs
+      const matchingUsers = await User.find({
+        $or: [{ displayName: regex }, { username: regex }],
+      }).select("_id");
+      const userIds = matchingUsers.map((u) => u._id);
+
+      filter.$or = [
+        { title: regex },
+        { authorId: { $in: userIds } },
       ];
     }
 
-    if (category) where.category = category as any;
-    if (status) where.status = status as PostStatus;
-    if (reported) where.reports = { some: {} };
+    if (category) filter.category = category;
+    if (status) filter.status = status;
+
+    // If reported filter, find post IDs that have reports
+    if (reported) {
+      const reportedPostIds = await Report.distinct("postId");
+      filter._id = { $in: reportedPostIds };
+    }
 
     const [posts, total] = await Promise.all([
-      prisma.post.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { createdAt: "desc" },
-        include: {
-          author: {
-            select: { id: true, username: true, displayName: true, avatar: true },
-          },
-          _count: { select: { likes: true, comments: true, reports: true } },
-        },
-      }),
-      prisma.post.count({ where }),
+      Post.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate("authorId", authorSelect),
+      Post.countDocuments(filter),
     ]);
 
+    const enriched = await Promise.all(
+      posts.map(async (p) => {
+        const postId = p._id;
+        const [likesCount, commentsCount, reportsCount] = await Promise.all([
+          Like.countDocuments({ postId }),
+          Comment.countDocuments({ postId }),
+          Report.countDocuments({ postId }),
+        ]);
+        const obj: any = p.toJSON();
+        obj.author = obj.authorId;
+        delete obj.authorId;
+        obj._count = { likes: likesCount, comments: commentsCount, reports: reportsCount };
+        return obj;
+      })
+    );
+
     return {
-      posts,
+      posts: enriched,
       meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
     };
   }
 
-  async updatePostStatus(postId: string, status: PostStatus) {
-    const post = await prisma.post.findUnique({ where: { id: postId } });
+  async updatePostStatus(postId: string, status: string) {
+    const post = await Post.findById(postId);
     if (!post) throw ApiError.notFound("Post not found");
 
-    const updated = await prisma.post.update({
-      where: { id: postId },
-      data: { status },
-      include: {
-        author: {
-          select: { id: true, username: true, displayName: true, avatar: true },
-        },
-        _count: { select: { likes: true, comments: true, reports: true } },
-      },
-    });
+    const updated = await Post.findByIdAndUpdate(postId, { status }, { new: true }).populate("authorId", authorSelect);
 
-    return updated;
+    const [likesCount, commentsCount, reportsCount] = await Promise.all([
+      Like.countDocuments({ postId }),
+      Comment.countDocuments({ postId }),
+      Report.countDocuments({ postId }),
+    ]);
+
+    const obj: any = updated!.toJSON();
+    obj.author = obj.authorId;
+    delete obj.authorId;
+    obj._count = { likes: likesCount, comments: commentsCount, reports: reportsCount };
+
+    return obj;
   }
 
   async deletePost(postId: string) {
-    const post = await prisma.post.findUnique({ where: { id: postId } });
+    const post = await Post.findById(postId);
     if (!post) throw ApiError.notFound("Post not found");
 
-    await prisma.post.delete({ where: { id: postId } });
+    await Promise.all([
+      Comment.deleteMany({ postId }),
+      Like.deleteMany({ postId }),
+      SavedPost.deleteMany({ postId }),
+      Report.deleteMany({ postId }),
+      Post.findByIdAndDelete(postId),
+    ]);
   }
 
   // ─── Reported Posts ──────────────────────────────────
@@ -92,41 +126,58 @@ export class AdminService {
   async getReportedPosts(page: number, limit: number) {
     const skip = (page - 1) * limit;
 
-    const where: Prisma.PostWhereInput = { reports: { some: {} } };
+    // Find post IDs that have reports
+    const reportedPostIds = await Report.distinct("postId");
+
+    const filter = { _id: { $in: reportedPostIds } };
 
     const [posts, total] = await Promise.all([
-      prisma.post.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { createdAt: "desc" },
-        include: {
-          author: {
-            select: { id: true, username: true, displayName: true, avatar: true },
-          },
-          reports: {
-            include: {
-              user: { select: { id: true, username: true, displayName: true } },
-            },
-            orderBy: { createdAt: "desc" },
-          },
-          _count: { select: { likes: true, comments: true, reports: true } },
-        },
-      }),
-      prisma.post.count({ where }),
+      Post.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate("authorId", authorSelect),
+      Post.countDocuments(filter),
     ]);
 
+    const enriched = await Promise.all(
+      posts.map(async (p) => {
+        const postId = p._id;
+        const [likesCount, commentsCount, reports] = await Promise.all([
+          Like.countDocuments({ postId }),
+          Comment.countDocuments({ postId }),
+          Report.find({ postId })
+            .sort({ createdAt: -1 })
+            .populate("userId", "username displayName"),
+        ]);
+
+        const formattedReports = reports.map((r) => {
+          const rObj: any = r.toJSON();
+          rObj.user = rObj.userId;
+          delete rObj.userId;
+          return rObj;
+        });
+
+        const obj: any = p.toJSON();
+        obj.author = obj.authorId;
+        delete obj.authorId;
+        obj.reports = formattedReports;
+        obj._count = { likes: likesCount, comments: commentsCount, reports: reports.length };
+        return obj;
+      })
+    );
+
     return {
-      posts,
+      posts: enriched,
       meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
     };
   }
 
   async dismissReports(postId: string) {
-    const post = await prisma.post.findUnique({ where: { id: postId } });
+    const post = await Post.findById(postId);
     if (!post) throw ApiError.notFound("Post not found");
 
-    await prisma.report.deleteMany({ where: { postId } });
+    await Report.deleteMany({ postId });
 
     return { postId, message: "All reports dismissed" };
   }
@@ -137,102 +188,95 @@ export class AdminService {
     const { search, status, role, page, limit } = filters;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.UserWhereInput = {};
+    const filter: any = {};
 
     if (search) {
-      where.OR = [
-        { username: { contains: search, mode: "insensitive" } },
-        { displayName: { contains: search, mode: "insensitive" } },
-        { email: { contains: search, mode: "insensitive" } },
+      const regex = new RegExp(search, "i");
+      filter.$or = [
+        { username: regex },
+        { displayName: regex },
+        { email: regex },
       ];
     }
 
-    if (status) where.status = status as UserStatus;
-    if (role) where.role = role as Role;
+    if (status) filter.status = status;
+    if (role) filter.role = role;
 
     const [users, total] = await Promise.all([
-      prisma.user.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { createdAt: "desc" },
-        select: {
-          id: true,
-          username: true,
-          email: true,
-          displayName: true,
-          avatar: true,
-          gender: true,
-          role: true,
-          status: true,
-          createdAt: true,
-          _count: { select: { posts: true, comments: true, likes: true, reports: true } },
-        },
-      }),
-      prisma.user.count({ where }),
+      User.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .select("-password"),
+      User.countDocuments(filter),
     ]);
 
+    const enriched = await Promise.all(
+      users.map(async (u) => {
+        const userId = u._id;
+        const [postsCount, commentsCount, likesCount, reportsCount] = await Promise.all([
+          Post.countDocuments({ authorId: userId }),
+          Comment.countDocuments({ authorId: userId }),
+          Like.countDocuments({ userId }),
+          Report.countDocuments({ userId }),
+        ]);
+        const obj: any = u.toJSON();
+        obj._count = { posts: postsCount, comments: commentsCount, likes: likesCount, reports: reportsCount };
+        return obj;
+      })
+    );
+
     return {
-      users,
+      users: enriched,
       meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
     };
   }
 
-  async updateUserRole(userId: string, role: Role) {
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+  async updateUserRole(userId: string, role: string) {
+    const user = await User.findById(userId);
     if (!user) throw ApiError.notFound("User not found");
 
-    const updated = await prisma.user.update({
-      where: { id: userId },
-      data: { role },
-      select: {
-        id: true,
-        username: true,
-        email: true,
-        displayName: true,
-        role: true,
-        status: true,
-      },
-    });
+    const updated = await User.findByIdAndUpdate(userId, { role }, { new: true }).select("username email displayName role status");
 
-    return updated;
+    return updated!.toJSON();
   }
 
   async toggleBanUser(userId: string) {
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+    const user = await User.findById(userId);
     if (!user) throw ApiError.notFound("User not found");
 
-    if (user.role === Role.ADMIN) {
+    if (user.role === "ADMIN") {
       throw ApiError.badRequest("Cannot ban an admin user");
     }
 
-    const newStatus = user.status === UserStatus.ACTIVE ? UserStatus.INACTIVE : UserStatus.ACTIVE;
+    const newStatus = user.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
 
-    const updated = await prisma.user.update({
-      where: { id: userId },
-      data: { status: newStatus },
-      select: {
-        id: true,
-        username: true,
-        email: true,
-        displayName: true,
-        role: true,
-        status: true,
-      },
-    });
+    const updated = await User.findByIdAndUpdate(userId, { status: newStatus }, { new: true })
+      .select("username email displayName role status");
 
-    return updated;
+    return updated!.toJSON();
   }
 
   async deleteUser(userId: string) {
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+    const user = await User.findById(userId);
     if (!user) throw ApiError.notFound("User not found");
 
-    if (user.role === Role.ADMIN) {
+    if (user.role === "ADMIN") {
       throw ApiError.badRequest("Cannot delete an admin user");
     }
 
-    await prisma.user.delete({ where: { id: userId } });
+    // Get all post IDs by this user for cascade
+    const userPostIds = await Post.find({ authorId: userId }).select("_id").then((p) => p.map((x) => x._id));
+
+    // Cascade delete all user data
+    await Promise.all([
+      Comment.deleteMany({ $or: [{ authorId: userId }, { postId: { $in: userPostIds } }] }),
+      Like.deleteMany({ $or: [{ userId }, { postId: { $in: userPostIds } }] }),
+      SavedPost.deleteMany({ $or: [{ userId }, { postId: { $in: userPostIds } }] }),
+      Report.deleteMany({ $or: [{ userId }, { postId: { $in: userPostIds } }] }),
+      Post.deleteMany({ authorId: userId }),
+      User.findByIdAndDelete(userId),
+    ]);
   }
 
   // ─── Stats ──────────────────────────────────────────
@@ -241,6 +285,8 @@ export class AdminService {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
+    const reportedPostIds = await Report.distinct("postId");
+
     const [
       totalPosts,
       todayPosts,
@@ -248,15 +294,13 @@ export class AdminService {
       totalUsers,
       bannedUsers,
       totalReports,
-      reportedPostsCount,
     ] = await Promise.all([
-      prisma.post.count(),
-      prisma.post.count({ where: { createdAt: { gte: today } } }),
-      prisma.post.count({ where: { status: PostStatus.REMOVED } }),
-      prisma.user.count(),
-      prisma.user.count({ where: { status: UserStatus.INACTIVE } }),
-      prisma.report.count(),
-      prisma.post.count({ where: { reports: { some: {} } } }),
+      Post.countDocuments(),
+      Post.countDocuments({ createdAt: { $gte: today } }),
+      Post.countDocuments({ status: "REMOVED" }),
+      User.countDocuments(),
+      User.countDocuments({ status: "INACTIVE" }),
+      Report.countDocuments(),
     ]);
 
     return {
@@ -266,7 +310,7 @@ export class AdminService {
       totalUsers,
       bannedUsers,
       totalReports,
-      reportedPostsCount,
+      reportedPostsCount: reportedPostIds.length,
     };
   }
 }

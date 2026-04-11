@@ -4,8 +4,6 @@ import { createPostSchema, updatePostSchema, postQuerySchema } from "../validati
 import { ApiResponse } from "../utils/apiResponse";
 import { asyncHandler } from "../utils/asyncHandler";
 import { AuthRequest } from "../types";
-import { PostCategory } from "@prisma/client";
-
 export const createPost = asyncHandler(async (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   const data = createPostSchema.parse(req.body);
@@ -26,7 +24,7 @@ export const getAllPosts = asyncHandler(async (req: Request, res: Response) => {
   const limit = parseInt(query.limit || "10", 10);
 
   const result = await postService.findAll({
-    category: query.category as PostCategory | undefined,
+    category: query.category,
     subcategory: query.subcategory,
     search: query.search,
     sort: query.sort,
