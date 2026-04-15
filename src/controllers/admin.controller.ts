@@ -1,9 +1,11 @@
 import { Request, Response } from "express";
-import { PostStatus, Role } from "@prisma/client";
 import { adminService } from "../services/admin.service";
 import { ApiResponse } from "../utils/apiResponse";
 import { asyncHandler } from "../utils/asyncHandler";
 import { ApiError } from "../utils/apiError";
+
+const VALID_POST_STATUSES = ["ACTIVE", "REMOVED"];
+const VALID_ROLES = ["USER", "ADMIN"];
 
 // ─── Posts ────────────────────────────────────────────
 
@@ -22,16 +24,16 @@ export const getAllPosts = asyncHandler(async (req: Request, res: Response) => {
 export const updatePostStatus = asyncHandler(async (req: Request, res: Response) => {
   const { status } = req.body;
 
-  if (!status || !Object.values(PostStatus).includes(status)) {
+  if (!status || !VALID_POST_STATUSES.includes(status)) {
     throw ApiError.badRequest("Invalid status. Must be ACTIVE or REMOVED");
   }
 
-  const post = await adminService.updatePostStatus(req.params.id, status as PostStatus);
+  const post = await adminService.updatePostStatus(req.params.id as string, status);
   ApiResponse.success(res, post, "Post status updated successfully");
 });
 
 export const deletePost = asyncHandler(async (req: Request, res: Response) => {
-  await adminService.deletePost(req.params.id);
+  await adminService.deletePost(req.params.id as string);
   ApiResponse.success(res, null, "Post deleted successfully");
 });
 
@@ -46,7 +48,7 @@ export const getReportedPosts = asyncHandler(async (req: Request, res: Response)
 });
 
 export const dismissReports = asyncHandler(async (req: Request, res: Response) => {
-  const result = await adminService.dismissReports(req.params.id);
+  const result = await adminService.dismissReports(req.params.id as string);
   ApiResponse.success(res, result, "Reports dismissed successfully");
 });
 
@@ -66,22 +68,22 @@ export const getAllUsers = asyncHandler(async (req: Request, res: Response) => {
 export const updateUserRole = asyncHandler(async (req: Request, res: Response) => {
   const { role } = req.body;
 
-  if (!role || !Object.values(Role).includes(role)) {
+  if (!role || !VALID_ROLES.includes(role)) {
     throw ApiError.badRequest("Invalid role. Must be USER or ADMIN");
   }
 
-  const user = await adminService.updateUserRole(req.params.id, role as Role);
+  const user = await adminService.updateUserRole(req.params.id as string, role);
   ApiResponse.success(res, user, "User role updated successfully");
 });
 
 export const toggleBanUser = asyncHandler(async (req: Request, res: Response) => {
-  const user = await adminService.toggleBanUser(req.params.id);
+  const user = await adminService.toggleBanUser(req.params.id as string);
   const action = user.status === "INACTIVE" ? "banned" : "unbanned";
   ApiResponse.success(res, user, `User ${action} successfully`);
 });
 
 export const deleteUser = asyncHandler(async (req: Request, res: Response) => {
-  await adminService.deleteUser(req.params.id);
+  await adminService.deleteUser(req.params.id as string);
   ApiResponse.success(res, null, "User and all associated data deleted successfully");
 });
 

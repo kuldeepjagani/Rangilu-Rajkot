@@ -16,12 +16,7 @@ export const config = {
   nodeEnv: getEnvVar("NODE_ENV", "development"),
 
   db: {
-    host: getEnvVar("DB_HOST", "localhost"),
-    port: parseInt(getEnvVar("DB_PORT", "5432"), 10),
-    username: getEnvVar("DB_USERNAME", "postgres"),
-    password: getEnvVar("DB_PASSWORD"),
-    name: getEnvVar("DB_NAME", "rangilu_rajkot"),
-    url: getEnvVar("DATABASE_URL"),
+    url: getEnvVar("MONGODB_URI"),
   },
 
   jwt: {
