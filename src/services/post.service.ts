@@ -66,7 +66,7 @@ export class PostService {
 
     await post.populate("authorId", authorSelect);
 
-    const postObj = post.toJSON();
+    const postObj: any = post.toJSON();
     postObj.author = postObj.authorId;
     delete postObj.authorId;
 
@@ -207,7 +207,7 @@ export class PostService {
       Comment.countDocuments({ postId: id }),
     ]);
 
-    const postObj = post.toJSON();
+    const postObj: any = post.toJSON();
     postObj.author = postObj.authorId;
     delete postObj.authorId;
 

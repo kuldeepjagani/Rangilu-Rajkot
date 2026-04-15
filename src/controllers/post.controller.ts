@@ -36,7 +36,7 @@ export const getAllPosts = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const getPostById = asyncHandler(async (req: Request, res: Response) => {
-  const post = await postService.findById(req.params.id);
+  const post = await postService.findById(req.params.id as string);
   ApiResponse.success(res, post);
 });
 
@@ -44,7 +44,7 @@ export const updatePost = asyncHandler(async (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   const data = updatePostSchema.parse(req.body);
 
-  const post = await postService.update(req.params.id, authReq.user!.userId, {
+  const post = await postService.update(req.params.id as string, authReq.user!.userId, {
     ...data,
     ...(data.images && { images: data.images }),
   });
@@ -54,25 +54,25 @@ export const updatePost = asyncHandler(async (req: Request, res: Response) => {
 
 export const deletePost = asyncHandler(async (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
-  await postService.delete(req.params.id, authReq.user!.userId, authReq.user!.role);
+  await postService.delete(req.params.id as string, authReq.user!.userId, authReq.user!.role);
   ApiResponse.success(res, null, "Post deleted successfully");
 });
 
 export const toggleLike = asyncHandler(async (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
-  const result = await postService.toggleLike(req.params.id, authReq.user!.userId);
+  const result = await postService.toggleLike(req.params.id as string, authReq.user!.userId);
   ApiResponse.success(res, result, result.liked ? "Post liked" : "Post unliked");
 });
 
 export const toggleSave = asyncHandler(async (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
-  const result = await postService.toggleSave(req.params.id, authReq.user!.userId);
+  const result = await postService.toggleSave(req.params.id as string, authReq.user!.userId);
   ApiResponse.success(res, result, result.saved ? "Post saved" : "Post unsaved");
 });
 
 export const reportPost = asyncHandler(async (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   const { reason } = req.body;
-  const result = await postService.reportPost(req.params.id, authReq.user!.userId, reason);
+  const result = await postService.reportPost(req.params.id as string, authReq.user!.userId, reason);
   ApiResponse.created(res, result, "Post reported successfully");
 });

@@ -7,7 +7,7 @@ import { AuthRequest } from "../types";
 import { uploadToS3 } from "../utils/s3";
 
 export const getPublicProfile = asyncHandler(async (req: Request, res: Response) => {
-  const user = await userService.getPublicProfile(req.params.username);
+  const user = await userService.getPublicProfile(req.params.username as string);
   ApiResponse.success(res, user);
 });
 

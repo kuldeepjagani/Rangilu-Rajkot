@@ -12,7 +12,7 @@ export class CommentService {
     const comment = await Comment.create({ content, authorId, postId });
     await comment.populate("authorId", authorSelect);
 
-    const obj = comment.toJSON();
+    const obj: any = comment.toJSON();
     obj.author = obj.authorId;
     delete obj.authorId;
 
@@ -41,7 +41,7 @@ export class CommentService {
 
     await reply.populate("authorId", authorSelect);
 
-    const obj = reply.toJSON();
+    const obj: any = reply.toJSON();
     obj.author = obj.authorId;
     delete obj.authorId;
 

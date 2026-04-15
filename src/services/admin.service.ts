@@ -83,6 +83,7 @@ export class AdminService {
 
     return {
       posts: enriched,
+      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
     };
   }
 
@@ -145,6 +146,30 @@ export class AdminService {
     await Report.deleteMany({ postId });
 
     return { postId, message: "All reports dismissed" };
+  }
+
+  async updatePostStatus(postId: string, status: string) {
+    const post = await Post.findById(postId);
+    if (!post) throw ApiError.notFound("Post not found");
+
+    const updated = await Post.findByIdAndUpdate(postId, { status }, { new: true }).populate("authorId", authorSelect);
+    return updated!.toJSON();
+  }
+
+  async deletePost(postId: string) {
+    const post = await Post.findById(postId);
+    if (!post) throw ApiError.notFound("Post not found");
+
+    // Cascade delete all post-related data
+    await Promise.all([
+      Comment.deleteMany({ postId }),
+      Like.deleteMany({ postId }),
+      SavedPost.deleteMany({ postId }),
+      Report.deleteMany({ postId }),
+      Post.findByIdAndDelete(postId),
+    ]);
+
+    return { postId, message: "Post deleted successfully" };
   }
 
   // ─── Users ──────────────────────────────────────────
