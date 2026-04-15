@@ -25,7 +25,18 @@ app.use(generalRateLimiter);
 // Serve uploaded files statically
 app.use("/uploads", express.static(path.resolve(__dirname, "../", config.upload.dir)));
 
-// Health check
+// Health check (root level for Docker)
+app.get("/health", (_req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "Rangilu-Rajkot API is healthy",
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: config.nodeEnv,
+  });
+});
+
+// Health check (API level)
 app.get("/api/health", (_req, res) => {
   res.json({ success: true, message: "RajkotLive API is running", timestamp: new Date().toISOString() });
 });
